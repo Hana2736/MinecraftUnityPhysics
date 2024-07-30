@@ -1,0 +1,22 @@
+name: MinecraftUnityPhysics # the plugins name as it should appear in the plugin list /pl
+version: 1.0 # the plugin's version
+author: Hana
+main: lol.hana.mcunityphysics.MinecraftUnityPhysics
+api-version: 1.20 # the version of the API you want to use, required starting with 1.13\
+commands:
+  loadscene:
+    description: Initialize Minecraft scene in the Unity physics context
+    usage: /loadscene <ip:port> <radius>
+    permission: mcunityphysics.work
+  addblock:
+    description: Add Unity physics block at coordinates
+    usage: /addblock <material> <x> <y> <z>
+    permission: mcunityphysics.work
+  fillblock:
+    description: Add Unity physics block at coordinates like /fill
+    usage: /addblock <material> <x> <y> <z> .... <2>
+    permission: mcunityphysics.work
+  setmatrix:
+    description: Set matrix of block
+    usage: /setmatrix <ID> <4x4matrix vals>....
+    permission: mcunityphysics.work
