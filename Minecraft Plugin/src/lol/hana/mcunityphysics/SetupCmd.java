@@ -40,7 +40,11 @@ public class SetupCmd implements CommandExecutor {
         for (var curPlayer : players) {
             Container.trackedEntities.put(Container.currentEnt, curPlayer);
             Container.playerToTracked.put(curPlayer.getUniqueId(), Container.currentEnt);
-            Container.netClient.sendMsg("AddPlayer??" + Container.currentEnt + "??" + player.getName());
+
+            var addPMsg = NetMessages.AddPlayer.newBuilder();
+            addPMsg.setPlayerID(Container.currentEnt);
+            addPMsg.setPlayerName(player.getName());
+            Container.netClient.sendMsg(addPMsg);
             Container.currentEnt++;
         }
         Util.sendMsg("Added players to simulation.");
@@ -80,10 +84,12 @@ public class SetupCmd implements CommandExecutor {
                             continue;
                         blocksSent++;
                         //If we send too many messages too fast, we will go over the Unity buffer, so spread it out a bit
-                        if(blocksSent % 10 ==0)
-                            Thread.sleep(1);
+                      //  if (blocksSent % 10 == 0)
+                    //        Thread.sleep(1);
                         //stupid Minecraft has XZ inverted so we'll swap it for Unity
-                        Container.netClient.sendMsg("WorldBlock??" + z + "??" + y + "??" + x);
+                        var newBlock = NetMessages.WorldBlock.newBuilder();
+                        newBlock.addBlockCoords(z).addBlockCoords(y).addBlockCoords(x);
+                        Container.netClient.sendMsg(newBlock);
                     } catch (Exception e) {
                         //we probably cant load or reach this block, oh well
                     }
@@ -106,7 +112,7 @@ public class SetupCmd implements CommandExecutor {
         for (var pair : Container.playerPosVels.entrySet()) {
             //If they havent moved in ~100ms, we will stop the player
             if (System.currentTimeMillis() - Container.lastPlayerMoveEvent.get(pair.getKey()) > 2 * 50) {
-                Container.playerPosVels.put(pair.getKey(), new double[]{0, 0, 0});
+                Container.playerPosVels.put(pair.getKey(), new float[]{0, 0, 0});
                 Container.sendPlayerUpdate(pair.getKey());
             }
         }

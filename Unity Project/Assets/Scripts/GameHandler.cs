@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
 
 public class GameHandler : MonoBehaviour
@@ -9,17 +8,17 @@ public class GameHandler : MonoBehaviour
     private NetServer netServer;
 
     private double sendTimer;
-    private Dictionary<int, PhysicsBlock> trackedNetObjects;
+    private Dictionary<uint, PhysicsBlock> trackedNetObjects;
 
-    private Dictionary<int, RemotePlayer> trackedNetPlayers;
+    private Dictionary<uint, RemotePlayer> trackedNetPlayers;
 
     // Use this for initialization
     private void Start()
     {
         Debug.Log(Environment.Version);
         netServer = new NetServer(2737);
-        trackedNetObjects = new Dictionary<int, PhysicsBlock>();
-        trackedNetPlayers = new Dictionary<int, RemotePlayer>();
+        trackedNetObjects = new Dictionary<uint, PhysicsBlock>();
+        trackedNetPlayers = new Dictionary<uint, RemotePlayer>();
     }
 
     // Update is called once per frame
@@ -36,92 +35,83 @@ public class GameHandler : MonoBehaviour
         //process incoming messages from Minecraft
         while (!netServer.incomingMsgs.IsEmpty)
         {
-            string nextMsg;
+            object nextMsg;
             while (!netServer.incomingMsgs.TryDequeue(out nextMsg))
             {
                 //burn the thread until we can read what we want
             }
-            var parts = nextMsg.Split("??");
-            //Debug.Log("Msg:  " + nextMsg);
-            switch (parts[0])
+            Type mType = nextMsg.GetType();
+            if (mType == typeof(AddPlayer))
             {
-                //if the Minecraft server wants to add a human to our simulation
-                case "AddPlayer":
-                {
-                    //AddPlayer -> 0 -> Hana2736
-                    var entId = int.Parse(parts[1]);
-                    var newPlayerName = parts[2];
-                    var newPlayer = Instantiate(playerPrefab, Vector3.zero, Quaternion.identity);
-                    //find the nametag within the player
-                    var nameTag = newPlayer.GetComponentInChildren<TextMesh>();
-                    nameTag.text = newPlayerName;
-                    //save the player by their control script
-                    trackedNetPlayers[entId] = newPlayer.GetComponentInChildren<RemotePlayer>();
-                    break;
-                }
-                //if the Minecraft server is sending us block data
-                case "WorldBlock":
-                {
-                    //WorldBlock -> x -> y -> z
-                    var position = string3ToVec(parts[1], parts[2], parts[3]);
-                    //add a block w/ collision but no physics to Unity scene
-                    Instantiate(worldBlockPrefab, position, Quaternion.identity, worldBlocksContainer.transform);
-                    break;
-                }
-                //players moving in the world
-                case "PlayerUpdate":
-                {
-                    //PlayerUpdate -> playerID -> x -> y -> z -> vX -> vY -> vZ
-                    var pID = int.Parse(parts[1]);
-                    var pos = string3ToVec(parts[2], parts[3], parts[4]);
-                    var vel = string3ToVec(parts[5], parts[6], parts[7]);
-                    var player = trackedNetPlayers[pID];
-                    //set unity player location and estimated velocity
-                    player.transform.position = pos;
-                    player.velocity = vel;
-                    break;
-                }
-                case "AddPhys":
-                {
-                    //AddPhys -> id -> x -> y -> z
-                    var newBlock = Instantiate(physBlockPrefab, string3ToVec(parts[2], parts[3], parts[4]),
-                        Quaternion.identity).GetComponent<PhysicsBlock>();
-                    newBlock.myId = int.Parse(parts[1]);
-                    trackedNetObjects[newBlock.myId] = newBlock;
-                    break;
-                }
+                var addPlayerMsg = (AddPlayer)nextMsg;
+                var entId = addPlayerMsg.playerID;
+                var newPlayerName = addPlayerMsg.playerName;
+                var newPlayer = Instantiate(playerPrefab, Vector3.zero, Quaternion.identity);
+                //find the nametag within the player
+                var nameTag = newPlayer.GetComponentInChildren<TextMesh>();
+                nameTag.text = newPlayerName;
+                //save the player by their control script
+                trackedNetPlayers[entId] = newPlayer.GetComponentInChildren<RemotePlayer>();
+            }
+            else if (mType == typeof(WorldBlock))
+            {
+                var worldBlockMsg = (WorldBlock)nextMsg;
+                var position = new Vector3(worldBlockMsg.blockCoords[0], worldBlockMsg.blockCoords[1],
+                    worldBlockMsg.blockCoords[2]);
+                //add a block w/ collision but no physics to Unity scene
+                Instantiate(worldBlockPrefab, position, Quaternion.identity, worldBlocksContainer.transform);
+            }
+            else if (mType == typeof(PlayerUpdate))
+            {
+                var playerUpdateMsg = (PlayerUpdate)nextMsg;
+                var pID = playerUpdateMsg.playerID;
+                var pos = netFloatArrToVec(playerUpdateMsg.playerCoords);
+                var vel = netFloatArrToVec(playerUpdateMsg.playerVels);
+                var player = trackedNetPlayers[pID];
+                //set unity player location and estimated velocity
+                player.transform.position = pos;
+                player.velocity = vel;
+            }
+            else if (mType == typeof(AddPhys))
+            {
+                var addPhysMsg = (AddPhys)nextMsg;
+                var newBlock =
+                    Instantiate(physBlockPrefab, netFloatArrToVec(addPhysMsg.objectCoords), Quaternion.identity)
+                        .GetComponent<PhysicsBlock>();
+                newBlock.myId = addPhysMsg.objectID;
+                trackedNetObjects[newBlock.myId] = newBlock;
             }
         }
     }
 
-    private static Vector3 string3ToVec(string x, string y, string z)
+
+    private static Vector3 netFloatArrToVec(float[] arr)
     {
-        var dx = float.Parse(x);
-        var dy = float.Parse(y);
-        var dz = float.Parse(z);
-        return new Vector3(dx, dy, dz);
+        return new Vector3(arr[0], arr[1], arr[2]);
     }
 
-    private void sendUpdate(int id)
+    private void sendUpdate(uint id)
     {
-        //PhysUpdate -> id -> posX -> posY -> posZ -> matrix0 -> matrix1 ->.... matrix15
-        var update = new StringBuilder("PhysUpdate??");
         var phys = trackedNetObjects[id];
         var pos = phys.myChild.position;
-        var rotate = phys.myState;
         //send position and rotation matrix (flip pos XZ for notch)
-        //this code is really nasty, maybe i will consider a protobuf rewrite
-        update.Append(id).Append("??")
-            .Append(pos.z).Append("??").Append(pos.y).Append("??").Append(pos.x).Append("??")
-            .Append(rotate.m00).Append("??").Append(rotate.m01).Append("??").Append(rotate.m02).Append("??")
-            .Append(rotate.m03).Append("??")
-            .Append(rotate.m10).Append("??").Append(rotate.m11).Append("??").Append(rotate.m12).Append("??")
-            .Append(rotate.m13).Append("??")
-            .Append(rotate.m20).Append("??").Append(rotate.m21).Append("??").Append(rotate.m22).Append("??")
-            .Append(rotate.m23).Append("??")
-            .Append(rotate.m30).Append("??").Append(rotate.m31).Append("??").Append(rotate.m32).Append("??")
-            .Append(rotate.m33);
-        
-        netServer.sendMsg(update.ToString());
+        var rotate = phys.myState;
+        var updateMsg = new PhysUpdate
+        {
+            objectID = id,
+            objectCoords = new[] { pos.z, pos.y, pos.x }
+        };
+        var rotateArray = new float[16];
+        int ind = 0;
+        for (int row = 0; row < 4; row++)
+        {
+            for (int col = 0; col < 4; col++)
+            {
+                rotateArray[ind] = rotate[row, col];
+                ind++;
+            }
+        }
+        updateMsg.objectTransMatrixs = rotateArray;
+        netServer.sendMsg(updateMsg);
     }
 }

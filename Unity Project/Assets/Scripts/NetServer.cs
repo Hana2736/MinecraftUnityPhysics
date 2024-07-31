@@ -1,13 +1,16 @@
 ﻿using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading;
+using ProtoBuf;
+using UnityEngine;
 
 public class NetServer
 {
+    private readonly NetworkStream clientStream;
     public bool connected;
-    public ConcurrentQueue<string> incomingMsgs, outgoingMsgs;
+    public ConcurrentQueue<object> incomingMsgs;
+    public ConcurrentQueue<object> outgoingMsgs;
     public Socket serverSocket, clientSocket;
 
     public NetServer(int port)
@@ -22,31 +25,45 @@ public class NetServer
         //wait for client to connect
         serverSocket.Listen(100);
         clientSocket = serverSocket.Accept();
-        incomingMsgs = new ConcurrentQueue<string>();
-        outgoingMsgs = new ConcurrentQueue<string>();
+        //write immediately
+        clientSocket.NoDelay = true;
+        incomingMsgs = new ConcurrentQueue<object>();
+        outgoingMsgs = new ConcurrentQueue<object>();
         connected = true;
-
+        clientStream = new NetworkStream(clientSocket);
         //handle incoming messages from Minecraft, adding them to the queue for us to handle
         new Thread(() =>
         {
             while (connected)
-            while (true)
             {
-                var buffer = new byte[8192];
-                var received = clientSocket.Receive(buffer, SocketFlags.None);
-                var response = Encoding.ASCII.GetString(buffer, 0, received);
-
-                if (response.EndsWith("\n") /* is end of message */)
+                //the client will tell us the type of message it is trying to send
+                var nextTypeMsg =
+                    Serializer.DeserializeWithLengthPrefix<NextMessageType>(clientStream, PrefixStyle.Base128);
+                var nextType = nextTypeMsg.mType;
+             //   Debug.Log("Expecting "+nextType);
+                switch (nextType)
                 {
-                    //split the message into chunks and add it to be handled
-                    var split = response.Replace("\n", "").Split("<DEL>");
-                    foreach (var msg in split)
+                    //enqueue each type of message after the client tells us
+                    case MessageType.mAddPlayer:
                     {
-                        var trim = msg.Replace("<DONE>", "").Trim();
-                        if (trim.Length != 0)
-                            incomingMsgs.Enqueue(trim);
+                        DeserializeMessage<AddPlayer>();
+                        break;
                     }
-                    break;
+                    case MessageType.mWorldBlock:
+                    {
+                        DeserializeMessage<WorldBlock>();
+                        break;
+                    }
+                    case MessageType.mPlayerUpdate:
+                    {
+                        DeserializeMessage<PlayerUpdate>();
+                        break;
+                    }
+                    case MessageType.mAddPhys:
+                    {
+                        DeserializeMessage<AddPhys>();
+                        break;
+                    }
                 }
             }
         }).Start();
@@ -57,20 +74,35 @@ public class NetServer
         {
             while (connected)
             {
-                string toSend;
-                while (!outgoingMsgs.TryDequeue(out toSend))
+                object toSend;
+                while (outgoingMsgs.IsEmpty || !outgoingMsgs.TryDequeue(out toSend)) Thread.Sleep(1);
+
+                if (toSend is PhysUpdate)
                 {
-                    //burn thread until we can read it
+                    var mType = new NextMessageType
+                    {
+                        mType = MessageType.mPhysUpdate
+                    };
+                    SerializeMessage<NextMessageType>(mType);
+                    SerializeMessage<PhysUpdate>(toSend);
                 }
-                var echoBytes = Encoding.ASCII.GetBytes(toSend + "<DEL>\n");
-                clientSocket.Send(echoBytes);
             }
         }).Start();
     }
 
-    public void sendMsg(string msg)
+    public void sendMsg(object msg)
     {
-        msg = msg.Replace("\n", "");
         outgoingMsgs.Enqueue(msg);
+    }
+
+    private void DeserializeMessage<T>() where T : class
+    {
+        incomingMsgs.Enqueue(Serializer.DeserializeWithLengthPrefix<T>(clientStream, PrefixStyle.Base128));
+        //Debug.Log("got "+typeof(T));
+    }
+
+    private void SerializeMessage<T>(object toSend) where T : class
+    {
+        Serializer.SerializeWithLengthPrefix(clientStream, (T)toSend, PrefixStyle.Base128);
     }
 }

@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+option java_package = "lol.hana.mcunityphysics";
+
+enum MessageType {
+  mAddPlayer = 0;
+  mWorldBlock = 1;
+  mPlayerUpdate = 2;
+  mAddPhys = 3;
+  mPhysUpdate = 4;
+}
+
+message NextMessageType {
+  MessageType mType = 1;
+}
+
+message AddPlayer {
+  uint32 playerID = 1;
+  string playerName = 2;
+}
+
+message WorldBlock {
+  repeated sint32 blockCoords = 1;
+}
+
+message PlayerUpdate {
+  uint32 playerID = 1;
+  repeated float playerCoords = 2;
+  repeated float playerVel = 3;
+}
+
+message AddPhys {
+  uint32 objectID = 1;
+  repeated float objectCoords = 2;
+}
+
+message PhysUpdate {
+  uint32 objectID = 1;
+  repeated float objectCoords = 2;
+  repeated float objectTransMatrix = 3;
+}

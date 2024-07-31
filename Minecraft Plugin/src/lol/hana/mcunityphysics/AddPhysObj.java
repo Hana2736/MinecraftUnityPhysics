@@ -39,7 +39,12 @@ public class AddPhysObj implements CommandExecutor {
         physicsBlock.setBrightness(new Display.Brightness(15,15));
         //track it and send it to Unity for simulation
         Container.trackedEntities.put(Container.currentEnt, physicsBlock);
-        Container.netClient.sendMsg("AddPhys??"+Container.currentEnt+"??"+strings[3]+"??"+strings[2]+"??"+strings[1]);
+        var addPhys = NetMessages.AddPhys.newBuilder();
+        addPhys.setObjectID(Container.currentEnt);
+        addPhys.addObjectCoords((float) loc.getZ());
+        addPhys.addObjectCoords((float) loc.getY());
+        addPhys.addObjectCoords((float) loc.getX());
+        Container.netClient.sendMsg(addPhys);
         Util.sendMsg("Added new "+mat.name()+" physics block (ID "+Container.currentEnt+")");
         Container.currentEnt++;
         return true;

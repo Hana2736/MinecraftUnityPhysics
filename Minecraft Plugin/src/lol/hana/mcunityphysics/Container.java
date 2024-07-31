@@ -6,35 +6,33 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.joml.Matrix4f;
 
-import java.nio.FloatBuffer;
 import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 public class Container {
     public static Map<Integer, Entity> trackedEntities;
     public static Map<UUID, Integer> playerToTracked;
     public static int currentEnt = 0;
     public static NetClient netClient;
-    public static Map<UUID, double[]> playerPosVels;
+    public static Map<UUID, float[]> playerPosVels;
     public static Map<UUID, Long> lastPlayerMoveEvent;
 
 
     public static void sendPlayerUpdate(UUID playID) {
         Player play = Util.server().getPlayer(playID);
         var pLoc = play.getLocation();
-        double playerX = pLoc.getX();
-        double playerY = pLoc.getY();
-        double playerZ = pLoc.getZ();
-        var velVec = playerPosVels.get(playID);
-        double playerVX = velVec[0];
-        double playerVY = velVec[1];
-        double playerVZ = velVec[2];
+        float[] velVec = playerPosVels.get(playID);
         int trackedID = Container.playerToTracked.get(playID);
         //send Unity our current player state (angle doesnt matter because Minecraft hitboxes dont rotate)
-        Container.netClient.sendMsg("PlayerUpdate??" + trackedID + "??" +
-                playerZ + "??" + playerY + "??" + playerX + "??" +
-                playerVZ + "??" + playerVY + "??" + playerVX);
+        var pUpdate = NetMessages.PlayerUpdate.newBuilder();
+        pUpdate.setPlayerID(trackedID);
+        pUpdate.addPlayerCoords((float) pLoc.getZ());
+        pUpdate.addPlayerCoords((float) pLoc.getY());
+        pUpdate.addPlayerCoords((float) pLoc.getX());
+        pUpdate.addPlayerVel(velVec[2]);
+        pUpdate.addPlayerVel(velVec[1]);
+        pUpdate.addPlayerVel(velVec[0]);
+        netClient.sendMsg(pUpdate);
     }
 
 
@@ -43,30 +41,25 @@ public class Container {
         if (!netClient.connected)
             return;
         while (!netClient.incomingMsgs.isEmpty()) {
-            String toDo = netClient.incomingMsgs.poll();
-            String[] parts = toDo.split(Pattern.quote("??"));
-            //this switch is kinda redundant, but it makes it easy to add more messages
-            switch (parts[0]) {
-                case "PhysUpdate": {
-                    int id = Integer.parseInt(parts[1]);
-                    double posX = Double.parseDouble(parts[2]);
-                    double posY = Double.parseDouble(parts[3]);
-                    double posZ = Double.parseDouble(parts[4]);
-                    float[] rotate = new float[16];
-                    for (int i = 5; i < parts.length; i++) {
-                        rotate[i - 5] = Float.parseFloat(parts[i]);
-                    }
-                    BlockDisplay found = (BlockDisplay) trackedEntities.get(id);
-                    found.setInterpolationDuration(2);
-                    found.teleport(new Location(found.getWorld(), posX, posY, posZ));
-                    //this is really ugly, but using a FloatStream consistently crashed the entire JVM, so oh well
-                    found.setTransformationMatrix(new Matrix4f(rotate[0],rotate[1],rotate[2],rotate[3],rotate[4],rotate[5],rotate[6],rotate[7],rotate[8],rotate[9],rotate[10],rotate[11],rotate[12],rotate[13],rotate[14],rotate[15]));
-                    break;
+            var toDo = netClient.incomingMsgs.poll();
+            //Util.sendMsg(toDo.getClass().toString());
+            if (toDo instanceof NetMessages.PhysUpdate cast) {
+                //Util.sendMsg("phys");
+                int id = cast.getObjectID();
+                var pos = cast.getObjectCoordsList();
+                var transMtx = cast.getObjectTransMatrixList();
+                float[] rotate = new float[16];
+                for (int i = 0; i < transMtx.size(); i++) {
+                    rotate[i] = transMtx.get(i);
                 }
+                BlockDisplay found = (BlockDisplay) trackedEntities.get(id);
+                found.setInterpolationDuration(2);
+                //Util.sendMsg("Pos: "+pos.get(0)+" "+pos.get(1)+" "+pos.get(2));
+                found.teleport(new Location(found.getWorld(), pos.get(0), pos.get(1), pos.get(2)));
+                //this is really ugly, but using a FloatStream consistently crashed the entire JVM, so oh well
+                found.setTransformationMatrix(new Matrix4f(rotate[0], rotate[1], rotate[2], rotate[3], rotate[4], rotate[5], rotate[6], rotate[7], rotate[8], rotate[9], rotate[10], rotate[11], rotate[12], rotate[13], rotate[14], rotate[15]));
             }
         }
-
-
         Util.runLater(Container::handleIncoming, 1);
     }
 }

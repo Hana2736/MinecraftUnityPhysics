@@ -1,13 +1,17 @@
 package lol.hana.mcunityphysics;
 
-import java.io.*;
+import lol.hana.mcunityphysics.NetMessages.NextMessageType;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class NetClient {
     public Socket netSocket;
-    public ConcurrentLinkedQueue<String> incomingMsgs;
-    public ConcurrentLinkedQueue<String> outgoingMsgs;
+    public ConcurrentLinkedQueue<Object> incomingMsgs;
+    public ConcurrentLinkedQueue<Object> outgoingMsgs;
     public boolean connected = false;
 
     public NetClient(String host, int port) {
@@ -22,25 +26,25 @@ public class NetClient {
             //set up socket I/O
             InputStream in = netSocket.getInputStream();
             OutputStream out = netSocket.getOutputStream();
-            InputStreamReader isr = new InputStreamReader(in);
-            BufferedReader br = new BufferedReader(isr);
-            PrintWriter printWriter = new PrintWriter(out, false);
+
 
             //read messages from the socket as they become available and store them for plugin use
             new Thread(() -> {
                 while (connected) {
                     try {
-                        String nextMsg = br.readLine();
-                        String[] split = nextMsg.split("<DEL>");
-                        for(String msg : split) {
-                            String toDo = msg.replace('\n',' ').trim();
-                            if(!toDo.isEmpty())
-                                incomingMsgs.add(toDo);
+                        NetMessages.MessageType msgType = NextMessageType.parseDelimitedFrom(in).getMType();
+                        //Util.sendMsg(msgType.toString());
+                        switch (msgType) {
+                            case mPhysUpdate: {
+                                var msg = NetMessages.PhysUpdate.parseDelimitedFrom(in);
+                                incomingMsgs.add(msg);
+                                break;
+                            }
                         }
-
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         connected = false;
                         Util.sendMsg("Socket connection lost " + e.getMessage());
+
                     }
                 }
             }).start();
@@ -48,11 +52,42 @@ public class NetClient {
             //send messages from the plugin to the socket
             new Thread(() -> {
                 while (connected)
-                    while (!outgoingMsgs.isEmpty()) {
-                        String toSend = outgoingMsgs.poll();
-                        toSend = toSend.replace('\n', ' ');
-                        printWriter.println(toSend+"<DEL>");
-                        printWriter.flush();
+                    try {
+                        while (!outgoingMsgs.isEmpty()) {
+                            var toSend = outgoingMsgs.poll();
+                            var mType = NextMessageType.newBuilder();
+                            //i do not like Java.
+                            if (toSend instanceof NetMessages.AddPlayer.Builder) {
+                                Util.sendMsg("adding player");
+                                try {
+                                    mType.setMType(NetMessages.MessageType.mAddPlayer);
+                                    mType.build().writeDelimitedTo(out);
+                                    ((NetMessages.AddPlayer.Builder) toSend).build().writeDelimitedTo(out);
+                                    Util.sendMsg("added player");
+                                } catch (Exception e) {
+                                    Util.sendMsg("Protobuf epic fail: " + e.getMessage());
+                                    for (var el : e.getStackTrace()) {
+                                        Util.sendMsg(el.toString());
+                                    }
+                                }
+
+                            } else if (toSend instanceof NetMessages.WorldBlock.Builder) {
+                                mType.setMType(NetMessages.MessageType.mWorldBlock);
+                                mType.build().writeDelimitedTo(out);
+                                ((NetMessages.WorldBlock.Builder) toSend).build().writeDelimitedTo(out);
+                            } else if (toSend instanceof NetMessages.PlayerUpdate.Builder) {
+                                mType.setMType(NetMessages.MessageType.mPlayerUpdate);
+                                mType.build().writeDelimitedTo(out);
+                                ((NetMessages.PlayerUpdate.Builder) toSend).build().writeDelimitedTo(out);
+                            } else if (toSend instanceof NetMessages.AddPhys.Builder) {
+                                mType.setMType(NetMessages.MessageType.mAddPhys);
+                                mType.build().writeDelimitedTo(out);
+                                ((NetMessages.AddPhys.Builder) toSend).build().writeDelimitedTo(out);
+                            }
+                        }
+                    } catch (Exception e) {
+                        Util.sendMsg("Socket connection lost " + e.getMessage());
+                        disconnect();
                     }
             }).start();
 
@@ -61,7 +96,7 @@ public class NetClient {
         }
     }
 
-    public void sendMsg(String msg) {
+    public void sendMsg(Object msg) {
         outgoingMsgs.add(msg);
     }
 

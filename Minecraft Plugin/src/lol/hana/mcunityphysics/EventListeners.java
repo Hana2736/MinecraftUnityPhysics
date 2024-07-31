@@ -28,14 +28,14 @@ public class EventListeners implements Listener {
         Location old = event.getFrom();
         Location now = event.getTo();
         //Calculate movement velocity based on their times
-        double[] vel = new double[3];
+        float[] vel = new float[3];
         double dX = now.getX() - old.getX();
         double dY = now.getY() - old.getY();
         double dZ = now.getZ() - old.getZ();
         //Util.sendMsg("deltaTime="+deltaTime+" dX="+dX+" dY="+dY+" dZ="+dZ);
-        vel[0] = dX / deltaTime * 1000;
-        vel[1] = dY / deltaTime * 1000;
-        vel[2] = dZ / deltaTime * 1000;
+        vel[0] = (float) (dX / deltaTime * 1000);
+        vel[1] = (float) (dY / deltaTime * 1000);
+        vel[2] = (float) (dZ / deltaTime * 1000);
         Container.playerPosVels.put(id,vel);
 
         //send the player pos now
