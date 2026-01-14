@@ -12,7 +12,7 @@ This project operates on a **Client-Server architecture** where Minecraft acts a
 
 *   **Synchronization:** Real-time data streaming via high-frequency socket communication (Default Port: `2737`).
 *   **Math & Mapping:** Implements 1:1 coordinate mapping and 4x4 transform matrix calculations to align Unity’s world space with Minecraft’s voxel grid.
-*   **Extensibility:** Built using a modular API that allows for the instantiation of any Unity physics material or object within the Minecraft environment.
+*   **Extensibility:** Built to be integrated into Minecraft games that require complex phsyics, like building destruction or projectile tracking.
 
 ## 🛠️ Built With
 - **Unity 2022:** (Developed on Pro, compatible with Personal)
