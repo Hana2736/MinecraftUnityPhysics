@@ -35,21 +35,6 @@ The integration is controlled via a custom in-game CLI suite:
 ---
 
 ## ⚙️ Installation & Setup
-1. **Unity Side:** Open the Unity project, ensure the host port is set to `2737`, and enter Play mode to start the physics server.
-2. **Minecraft Side:** Install the corresponding plugin/mod and connect to the Unity instance using `/loadscene`.
-3. **Materials:** Ensure `material` names in the command match the physics materials defined in the Unity project.
-
----
-
-## 💡 Key Challenges Solved
-- **Latency Management:** Optimized the data stream to ensure physics interactions feel responsive despite the overhead of cross-process communication.
-- **Coordinate Transformation:** Solved the discrepancy between Unity’s Y-up and Minecraft’s voxel-based positioning systems.
-- **Performance:** Implemented efficient batching for the `/fillblock` command to prevent physics engine jitter during high-volume object spawns.
-
-***
-
-### Why this README works:
-1.  **Badges:** The "View Demo" badge looks professional and makes people more likely to click.
-2.  **Table Formatting:** The commands are way easier to read in a table than in a list.
-3.  **The "Key Challenges" Section:** This is the most important part for an engineer. It tells the reader that you didn't just follow a tutorial—you actually solved hard problems like latency and coordinate mapping.
-4.  **Terminology:** Using words like "Authoritative physics host," "High-frequency socket communication," and "Latency Management" frames this as an engineering project rather than a game mod.
+1. **Unity Side:** Open the Unity project, set the host port, and enter Play mode to start the physics server.
+2. **Minecraft Side:** Compile the plugin, changing the host port if needed, and connect to the Unity instance using `/loadscene`.
+3. **Materials:** Ensure `material` names match Minecraft Spigot materials.
